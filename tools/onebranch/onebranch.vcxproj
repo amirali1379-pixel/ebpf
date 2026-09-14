@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) eBPF for Windows contributors
+     SPDX-License-Identifier: MIT
+-->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(SolutionDir)wdk.props" />
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{58d6bab8-10ef-4a99-aff2-6b14269a8dcd}</ProjectGuid>
+    <RootNamespace>onebranch</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='NativeOnlyDebug'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='NativeOnlyRelease'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='NativeOnlyDebug' And '$(BuildOneBranch)'=='True'">
+    <PostBuildEvent>
+      <Command Condition="'$(Platform)'=='x64'">xcopy /yie $(OutDir) $(SolutionDir)build\bin\$(Platform)_NativeOnlyDebug
+for /d %%d in ("$(VC_DebugCppRuntimeFilesPath_x64)\Microsoft.VC*.DebugCRT") do xcopy /D /Y "%%d\*" "$(SolutionDir)build\bin\$(Platform)_NativeOnlyDebug"
+xcopy /D /Y "$(UniversalDebugCRT_ExecutablePath_x64)\ucrtbased.dll" "$(SolutionDir)build\bin\$(Platform)_NativeOnlyDebug"</Command>
+      <Command Condition="'$(Platform)'=='ARM64'">xcopy /yie $(OutDir) $(SolutionDir)build\bin\$(Platform)_NativeOnlyDebug
+for /d %%d in ("$(VC_DebugCppRuntimeFilesPath_ARM64)\Microsoft.VC*.DebugCRT") do xcopy /D /Y "%%d\*" "$(SolutionDir)build\bin\$(Platform)_NativeOnlyDebug"
+xcopy /D /Y "$(UniversalDebugCRT_ExecutablePath_ARM64)\ucrtbased.dll" "$(SolutionDir)build\bin\$(Platform)_NativeOnlyDebug"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='NativeOnlyRelease' And '$(BuildOneBranch)'=='True'">
+    <PostBuildEvent>
+      <Command>xcopy /yie $(OutDir) $(SolutionDir)build\bin\$(Platform)_NativeOnlyRelease</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug' And '$(BuildOneBranch)'=='True'">
+    <PostBuildEvent>
+      <Command>xcopy /yie $(OutDir) $(SolutionDir)build\bin\$(Platform)_Debug</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release' And '$(BuildOneBranch)'=='True'">
+    <PostBuildEvent>
+      <Command>xcopy /yie $(OutDir) $(SolutionDir)build\bin\$(Platform)_Release</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\tests\api_test\api_test.vcxproj">
+      <Project>{12161211-5463-4aa9-9b6e-552552b475dc}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\sample\sample.vcxproj">
+      <Project>{b4ad72e3-754e-40ca-9cea-d3f2c9170e51}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\undocked\tests\sample\ext\drv\sample_ext.vcxproj">
+      <Project>{c8d46543-5ae5-4e66-b9ce-8b84588b1c9e}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\export_program_info_test\export_program_info_test.vcxproj">
+      <Project>{8b2f1f1a-3c4d-4e5f-9a6b-1c2d3e4f5a6b}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\socket\socket_tests.vcxproj">
+      <Project>{eed9dac6-8b98-4c33-969a-e8cede8e985e}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\undocked\tools\export_program_info_sample\export_program_info_sample.vcxproj">
+      <Project>{21c137ec-9ae3-4c8c-8e74-8bfcc999d856}</Project>
+    </ProjectReference>
+    <!-- Driver test binaries. These are invoked from scripts\run_driver_tests.psm1 on
+         the driver-test VMs, so they need to ship in the official build artifact. -->
+    <ProjectReference Include="..\..\tests\bpftool_tests\bpftool_tests.vcxproj">
+      <Project>{8b5b061b-3170-4d1b-8c5b-e86b890c14b8}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\sample\ext\app\sample_ext_app.vcxproj">
+      <Project>{6D365515-DE92-4CEB-AB3D-5608719A8886}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\performance\performance.vcxproj">
+      <Project>{724eb55a-ccfc-4662-92e3-b664cda365e7}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\stress\restart_test_controller\ebpf_restart_test_controller.vcxproj">
+      <Project>{E3F9A8B4-5678-4ABC-9DEF-123456789ABC}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\stress\restart_test_helper\ebpf_restart_test_helper.vcxproj">
+      <Project>{25725C06-3335-4CBA-AB16-6FE5E51BE842}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\tests\stress\km\ebpf_stress_tests_km.vcxproj">
+      <Project>{4F082524-9496-44FA-8CBA-4BC0BDC62568}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

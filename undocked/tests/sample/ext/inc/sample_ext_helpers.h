@@ -1,0 +1,163 @@
+// Copyright (c) eBPF for Windows contributors
+// SPDX-License-Identifier: MIT
+#pragma once
+
+/**
+ * @file
+ * @brief This file contains program context and helper functions declarations that are
+ * exposed by the sample extension.
+ */
+
+#if !defined(NO_CRT) && !defined(_NO_CRT_STDIO_INLINE)
+#include <stdint.h>
+#else
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef unsigned long long uint64_t;
+typedef long long int64_t;
+#endif
+
+// Sample extension program context.
+typedef struct _sample_program_context
+{
+    uint8_t* data_start;
+    uint8_t* data_end;
+    uint32_t uint32_data;
+    uint16_t uint16_data;
+    uint32_t helper_data_1;
+    uint32_t helper_data_2;
+} sample_program_context_t;
+
+#define SAMPLE_EXT_HELPER_FN_BASE 0xFFFF
+
+#ifndef __doxygen
+#define EBPF_HELPER(return_type, name, args) typedef return_type(*const name##_t) args
+#endif
+
+/**
+ * @brief Illustrates helper function with parameter of type EBPF_ARGUMENT_TYPE_PTR_TO_CTX.
+ * @param[in] context Pointer to program context.
+ * @retval 0 The operation was successful.
+ */
+EBPF_HELPER(int64_t, sample_ebpf_extension_helper_function1, (sample_program_context_t * context));
+#ifndef __doxygen
+#define sample_ebpf_extension_helper_function1 ((sample_ebpf_extension_helper_function1_t)SAMPLE_EXT_HELPER_FN_BASE + 1)
+#endif
+
+/**
+ * @brief Looks for the supplied pattern in the input buffer.
+ * @param[in] context Pointer to buffer.
+ * @param[in] size Size of buffer.
+ * @param[in] find Pointer to pattern buffer.
+ * @param[in] arg_size Length of pattern buffer.
+ * @returns Offset of the input buffer where the patter begins.
+ */
+EBPF_HELPER(int64_t, sample_ebpf_extension_find, (void* buffer, size_t size, void* find, size_t arg_size));
+#ifndef __doxygen
+#define sample_ebpf_extension_find ((sample_ebpf_extension_find_t)SAMPLE_EXT_HELPER_FN_BASE + 2)
+#endif
+
+/**
+ * @brief Replaces bytes in input buffer with supplied replacement at given offset.
+ * @param[in] context Pointer to buffer.
+ * @param[in] size Size of buffer.
+ * @param[in] position Offset of input buffer at which replacement has to be done.
+ * @param[in] find Pointer to replacement buffer.
+ * @param[in] arg_size Length of replacement buffer.
+ * @retval 0 The operation was successful.
+ * @retval -1 An error occurred.
+ */
+EBPF_HELPER(
+    int64_t,
+    sample_ebpf_extension_replace,
+    (void* buffer, size_t size, int64_t position, void* replace, size_t arg_size));
+#ifndef __doxygen
+#define sample_ebpf_extension_replace ((sample_ebpf_extension_replace_t)SAMPLE_EXT_HELPER_FN_BASE + 3)
+#endif
+
+/**
+ * @brief Replaces bytes in input buffer with supplied replacement at given offset.
+ * @param[in] context Pointer to buffer.
+ * @param[in] size Size of buffer.
+ * @param[in] position Offset of input buffer at which replacement has to be done.
+ * @param[in] find Pointer to replacement buffer.
+ * @param[in] arg_size Length of replacement buffer.
+ * @retval 0 The operation was successful.
+ * @retval -1 An error occurred.
+ */
+EBPF_HELPER(int64_t, sample_ebpf_extension_helper_implicit_1, ());
+#ifndef __doxygen
+#define sample_ebpf_extension_helper_implicit_1 \
+    ((sample_ebpf_extension_helper_implicit_1_t)SAMPLE_EXT_HELPER_FN_BASE + 4)
+#endif
+
+/**
+ * @brief Replaces bytes in input buffer with supplied replacement at given offset.
+ * @param[in] context Pointer to buffer.
+ * @param[in] size Size of buffer.
+ * @param[in] position Offset of input buffer at which replacement has to be done.
+ * @param[in] find Pointer to replacement buffer.
+ * @param[in] arg_size Length of replacement buffer.
+ * @retval 0 The operation was successful.
+ * @retval -1 An error occurred.
+ */
+EBPF_HELPER(int64_t, sample_ebpf_extension_helper_implicit_2, (uint32_t arg));
+#ifndef __doxygen
+#define sample_ebpf_extension_helper_implicit_2 \
+    ((sample_ebpf_extension_helper_implicit_2_t)SAMPLE_EXT_HELPER_FN_BASE + 5)
+#endif
+
+/**
+ * @brief Map lookup element helper function for sample extension.
+ *
+ * @param[in] map Pointer to the map.
+ * @param[in] key Pointer to the key.
+ * @returns Pointer to the value if found or NULL.
+ */
+EBPF_HELPER(void*, sample_ext_helper_map_lookup_element, (void* map, const void* key));
+#ifndef __doxygen
+#define sample_ext_helper_map_lookup_element ((sample_ext_helper_map_lookup_element_t)SAMPLE_EXT_HELPER_FN_BASE + 6)
+#endif
+
+/**
+ * @brief Map lookup element helper function for sample extension.
+ *
+ * @param[in] map Pointer to the map.
+ * @param[in] key Pointer to the key.
+ * @param[out] value Pointer to the value buffer to be filled.
+ * @param[in] value_size Size of the value buffer.
+ *
+ * @returns 0 if the value was found and copied to the buffer, -1 otherwise.
+ */
+EBPF_HELPER(int64_t, sample_ext_helper_map_get_value, (void* map, const void* key, uint8_t* value, size_t value_size));
+#ifndef __doxygen
+#define sample_ext_helper_map_get_value ((sample_ext_helper_map_get_value_t)SAMPLE_EXT_HELPER_FN_BASE + 7)
+#endif
+
+// Sample BTF-resolved function contract shared between the sample provider and test programs.
+#define SAMPLE_EXT_BTF_FUNCTION_NAME "sample_ebpf_extension_btf_lookup"
+#define SAMPLE_EXT_BTF_DECL_TAG "module_id:{8f6c1f83-ce4c-4b58-8b91-654a29e23b7c}"
+#define SAMPLE_EXT_BTF_MODULE_GUID_INITIALIZER                                         \
+    {                                                                                  \
+        0x8f6c1f83, 0xce4c, 0x4b58, { 0x8b, 0x91, 0x65, 0x4a, 0x29, 0xe2, 0x3b, 0x7c } \
+    }
+
+#if defined(__clang__)
+#define SAMPLE_EXT_BTF_DECL_ATTRIBUTES \
+    __attribute__((section(".ksyms"))) __attribute__((btf_decl_tag(SAMPLE_EXT_BTF_DECL_TAG)))
+#else
+#define SAMPLE_EXT_BTF_DECL_ATTRIBUTES
+#endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+    extern int
+    sample_ebpf_extension_btf_lookup(uint64_t key, void* value, uint32_t value_size) SAMPLE_EXT_BTF_DECL_ATTRIBUTES;
+
+#ifdef __cplusplus
+}
+#endif

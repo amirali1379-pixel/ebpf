@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) eBPF for Windows contributors
+  SPDX-License-Identifier: MIT
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" TreatAsLocalProperty="Platform">
+  <PropertyGroup Label="Version">
+    <EbpfVersion_Major>1</EbpfVersion_Major>
+    <EbpfVersion_Minor>5</EbpfVersion_Minor>
+    <EbpfVersion_Revision>0</EbpfVersion_Revision>
+    <EbpfVersion_Modifier/>
+    <EbpfVersionNoModifier>$(EbpfVersion_Major).$(EbpfVersion_Minor).$(EbpfVersion_Revision)</EbpfVersionNoModifier>
+    <EbpfVersion Condition="'$(EbpfVersion_Modifier)' == ''">$(EbpfVersion_Major).$(EbpfVersion_Minor).$(EbpfVersion_Revision)</EbpfVersion>
+    <EbpfVersion Condition="'$(EbpfVersion_Modifier)' != ''">$(EbpfVersion_Major).$(EbpfVersion_Minor).$(EbpfVersion_Revision)-$(EbpfVersion_Modifier)</EbpfVersion>
+  </PropertyGroup>
+  <!-- NuGet package name suffix: Release configs omit configuration, Debug configs include it.
+       Used by Set-Version.ps1 (via -ConfigSuffix parameter) and nuget/redist Outputs. -->
+  <PropertyGroup Condition="$(Configuration.Contains('Release'))">
+    <NugetConfigSuffix></NugetConfigSuffix>
+  </PropertyGroup>
+  <PropertyGroup Condition="!$(Configuration.Contains('Release'))">
+    <NugetConfigSuffix>.$(Configuration)</NugetConfigSuffix>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="NativeOnlyDebug|x64">
+      <Configuration>NativeOnlyDebug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="FuzzerDebug|x64">
+      <Configuration>FuzzerDebug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="NativeOnlyRelease|x64">
+      <Configuration>NativeOnlyRelease</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="NativeOnlyDebug|ARM64">
+      <Configuration>NativeOnlyDebug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="FuzzerDebug|ARM64">
+      <Configuration>FuzzerDebug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="NativeOnlyRelease|ARM64">
+      <Configuration>NativeOnlyRelease</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Analysis)'=='True'">
+    <RunCodeAnalysis>true</RunCodeAnalysis>
+    <DisableAnalyzeExternal>true</DisableAnalyzeExternal>
+    <CodeAnalysisRuleSet>$(SolutionDir)Analyze.default.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(AddressSanitizer)'=='True'">
+    <EnableASAN>true</EnableASAN>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='NativeOnlyDebug' Or '$(Configuration)'=='NativeOnlyRelease'">
+    <DisableJIT>true</DisableJIT>
+    <DisableInterpreter>true</DisableInterpreter>
+  </PropertyGroup>
+  <!-- Libsancov.lib not supported on arm64 -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64' Or '$(Configuration)|$(Platform)'=='NativeOnlyRelease|x64'">
+    <FuzzerLibs>libsancov.lib;clang_rt.fuzzer_MT-x86_64.lib</FuzzerLibs>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' Or '$(Configuration)|$(Platform)'=='FuzzerDebug|x64' Or '$(Configuration)|$(Platform)'=='NativeOnlyDebug|x64'">
+    <FuzzerLibs>libsancov.lib;clang_rt.fuzzer_MTd-x86_64.lib</FuzzerLibs>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Fuzzer)'=='True' OR '$(Configuration)'=='FuzzerDebug'">
+    <EnableASAN>true</EnableASAN>
+    <EnableFuzzer>true</EnableFuzzer>
+    <FuzzerLibs>libsancov.lib;clang_rt.fuzzer_MTd-x86_64.lib</FuzzerLibs>
+    <ClCompile>
+      <AdditionalOptions>/fsanitize-coverage=inline-bool-flag /fsanitize-coverage=edge /fsanitize-coverage=trace-cmp /fsanitize-coverage=trace-div /DFUZZER_BUILD %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Fuzzer)'!='True' And '$(Configuration)'!='FuzzerDebug'">
+    <SpectreMitigation>Spectre</SpectreMitigation>
+  </PropertyGroup>
+  <!-- Workaround for issue with WDK nuget package -->
+  <PropertyGroup>
+    <DriverCatalog_Enable>true</DriverCatalog_Enable>
+  </PropertyGroup>
+  <!-- Select the best version of clang available. -->
+  <!-- If $(VsInstallRoot)\VC\Tools\Llvm\bin\clang.exe exists, set ClangExe to that value -->
+  <PropertyGroup Condition="Exists('$(VsInstallRoot)\VC\Tools\Llvm\bin\clang.exe')">
+    <ClangExec>"$(VsInstallRoot)\VC\Tools\Llvm\bin\clang.exe"</ClangExec>
+  </PropertyGroup>
+  <!-- If $(ProgramFiles)\LLVM\bin\clang.exe exists, set ClangExe to that value -->
+  <PropertyGroup Condition="Exists('$(ProgramFiles)\LLVM\bin\clang.exe')">
+    <ClangExec>"$(ProgramFiles)\LLVM\bin\clang.exe"</ClangExec>
+  </PropertyGroup>
+  <!-- If $(SolutionDir)packages\llvm.tools\clang.exe exists, set ClangExe to that value -->
+  <PropertyGroup Condition="Exists('$(SolutionDir)packages\llvm.tools\clang.exe')">
+    <ClangExec>"$(SolutionDir)packages\llvm.tools\clang.exe"</ClangExec>
+  </PropertyGroup>
+  <!-- Set /allpdata only for the x64 platform. -->
+  <PropertyGroup Condition="'$(Platform)'=='x64'">
+    <AllPDataOption>/allpdata</AllPDataOption>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <WarningLevel>Level4</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <SDLCheck>true</SDLCheck>
+      <SupportJustMyCode>false</SupportJustMyCode>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <AdditionalOptions Condition="'$(VisualStudioVersion)' &lt; '18.0'">/ZH:SHA_256 /we4062 %(AdditionalOptions)</AdditionalOptions>
+      <!-- VS 2026 (MSBuild 18) emits C4875 for the deprecated [[gsl::suppress]] spelling used by
+           dependencies. Suppress it here until the upstream sources are updated. -->
+      <AdditionalOptions Condition="'$(VisualStudioVersion)' &gt;= '18.0'">/ZH:SHA_256 /we4062 /wd4875 %(AdditionalOptions)</AdditionalOptions>
+      <!-- $(DDK_INC_PATH) is defined in wdk.props; projects that include km headers via this list
+           must import wdk.props, otherwise this expands to an empty (dropped) include path. -->
+      <AdditionalIncludeDirectories>$(DDK_INC_PATH);$(SolutionDir)external\ebpf-verifier\build\packages\boost\lib\native\include;$(SolutionDir)external\ebpf-verifier;$(SolutionDir)external\ebpf-verifier\src;$(SolutionDir)external\ebpf-verifier\external\bpf_conformance\lib\include;$(OutDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <CETCompat Condition="'$(Platform)'=='x64'">true</CETCompat>
+      <AdditionalLibraryDirectories Condition="'$(Platform)'=='x64'">$(VC_LibraryPath_VC_x64_Desktop);%(Link.AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(Platform)'=='ARM64'">$(VC_LibraryPath_VC_ARM64_Desktop);%(Link.AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(DisableJIT)'=='True'">
+    <ClCompile>
+        <PreprocessorDefinitions>CONFIG_BPF_JIT_DISABLED;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(DisableInterpreter)'=='True'">
+    <ClCompile>
+        <PreprocessorDefinitions>CONFIG_BPF_INTERPRETER_DISABLED;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release' Or '$(Configuration)'=='NativeOnlyRelease'">
+    <ClCompile>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <WholeProgramOptimization Condition="'$(EnableAsan)' != 'true'">true</WholeProgramOptimization>
+      <!-- /Ob3 enable hinting to link time code generation that a function should be inlined -->
+      <AdditionalOptions>/Ob3 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions Condition="'$(EnableASAN)' != 'true'">/NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib /spgo $(AllPDataOption) %(AdditionalOptions)</AdditionalOptions>
+      <LinkTimeCodeGeneration Condition="'$(EnableAsan)' != 'true'">UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug' Or '$(Configuration)'=='FuzzerDebug' Or '$(Configuration)'=='NativeOnlyDebug'">
+    <ClCompile>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions Condition="'$(EnableASAN)' != 'true'">/NODEFAULTLIB:libucrtd.lib /DEFAULTLIB:ucrtd.lib %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Add the resource to applications, dlls, and drivers except if the resource file doesn't exist-->
+  <ItemGroup Condition="('$(ConfigurationType)'=='Application' Or '$(ConfigurationType)'=='DynamicLibrary' Or '$(ConfigurationType)'=='Driver') And Exists('$(SolutionDir)resource\ebpf_resource.rc')">
+    <ResourceCompile  Include="$(SolutionDir)resource\ebpf_resource.rc">
+      <AdditionalIncludeDirectories>$(SolutionDir)include;$(OutDir)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_AMD64_;_WIN32_WINNT=0x0a00;_WINDLL;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>_X86_;_WIN32_WINNT=0x0a00;_WINDLL;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='ARM64'">
+    <ClCompile>
+      <!-- Set the _ARM64_ as it is required by winnt.h for correct compilation rather than the standard _M_ARM64 -->
+      <PreprocessorDefinitions>_ARM64_;_WIN32_WINNT=0x0a00;_WINDLL;_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Set the option to emit both armv8.0 atomics and armv8.1 atomics with processor detection to select the best performing one.-->
+      <AdditionalOptions>/d2overrideInterlockedIntrinsArm64 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) eBPF for Windows contributors
+     SPDX-License-Identifier: MIT
+-->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(SolutionDir)wdk.props" />
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{A08B9A8B-FCD0-4E93-8811-D60EED639BE0}</ProjectGuid>
+    <RootNamespace>redist-package</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='NativeOnlyDebug'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='NativeOnlyRelease'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(EbpfPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)'=='Debug'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)'=='NativeOnlyDebug'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)'=='Release'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)'=='NativeOnlyRelease'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='NativeOnlyDebug'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='NativeOnlyRelease'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='NativeOnlyDebug'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='NativeOnlyRelease'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- In accordance to what is defined in sample.vcxproj, the build is disabled for the 'Analysis' CI/CD build, as it does not generate the printk.sys artifact. -->
+  <ItemGroup Condition="'$(Analysis)'==''">
+    <CustomBuild Include="ebpf-for-windows-redist.nuspec.in">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)'=='Debug'">powershell -NonInteractive -ExecutionPolicy Unrestricted $(SolutionDir)scripts\Set-Version.ps1 -InputFile $(SolutionDir)tools\redist-package\ebpf-for-windows-redist.nuspec.in -OutputFile $(OutDir)ebpf-for-windows-redist.nuspec -VCToolsRedistDir '$(VCToolsRedistInstallDir)' -Architecture '$(Platform)' -ConfigSuffix '$(NugetConfigSuffix)'
+NuGet.exe pack $(OutDir)ebpf-for-windows-redist.nuspec -OutputDirectory $(OutDir)</Command>
+      <Command Condition="'$(Configuration)'=='NativeOnlyDebug'">powershell -NonInteractive -ExecutionPolicy Unrestricted $(SolutionDir)scripts\Set-Version.ps1 -InputFile $(SolutionDir)tools\redist-package\ebpf-for-windows-redist.nuspec.in -OutputFile $(OutDir)ebpf-for-windows-redist.nuspec -VCToolsRedistDir '$(VCToolsRedistInstallDir)' -Architecture '$(Platform)' -ConfigSuffix '$(NugetConfigSuffix)'
+NuGet.exe pack $(OutDir)ebpf-for-windows-redist.nuspec -OutputDirectory $(OutDir)</Command>
+      <Outputs>$(OutDir)eBPF-for-Windows-Redist.$(Platform)$(NugetConfigSuffix).$(EbpfVersion).nupkg</Outputs>
+      <Command Condition="'$(Configuration)'=='Release'">powershell -NonInteractive -ExecutionPolicy Unrestricted $(SolutionDir)scripts\Set-Version.ps1 -InputFile $(SolutionDir)tools\redist-package\ebpf-for-windows-redist.nuspec.in -OutputFile $(OutDir)ebpf-for-windows-redist.nuspec -VCToolsRedistDir '$(VCToolsRedistInstallDir)' -Architecture '$(Platform)' -ConfigSuffix '$(NugetConfigSuffix)'
+NuGet.exe pack $(OutDir)ebpf-for-windows-redist.nuspec -OutputDirectory $(OutDir)</Command>
+      <Command Condition="'$(Configuration)'=='NativeOnlyRelease'">powershell -NonInteractive -ExecutionPolicy Unrestricted $(SolutionDir)scripts\Set-Version.ps1 -InputFile $(SolutionDir)tools\redist-package\ebpf-for-windows-redist.nuspec.in -OutputFile $(OutDir)ebpf-for-windows-redist.nuspec -VCToolsRedistDir '$(VCToolsRedistInstallDir)' -Architecture '$(Platform)' -ConfigSuffix '$(NugetConfigSuffix)'
+NuGet.exe pack $(OutDir)ebpf-for-windows-redist.nuspec -OutputDirectory $(OutDir)</Command>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ebpfapi\ebpfapi.vcxproj">
+      <Project>{75fe223a-3e45-4b0e-a2e8-04285e52e440}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ebpfcore\EbpfCore.vcxproj">
+      <Project>{97e52abb-2f1e-4ad2-aefd-6eb7fdc0a41d}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ebpfsvc\eBPFSvc.vcxproj">
+      <Project>{ba065b6a-38f8-4197-8f66-87c84afad513}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\netebpfext\sys\netebpfext.vcxproj">
+      <Project>{55499e36-37d4-4f86-b694-9f2990315758}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\bpftool\bpftool.vcxproj">
+      <Project>{ca179b38-ebf5-4371-b830-73486e35250b}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\netsh\ebpfnetsh.vcxproj">
+      <Project>{74803f80-a8bd-4a03-862b-fa96648a9bf6}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+    <None Include="ebpf-for-windows-redist.props" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <!-- Delete the nupkg before the up-to-date check so nuget pack always re-runs.
+       Used by scripts/onebranch/post-build.ps1 to repack with signed binaries. -->
+  <Target Name="ForceRepack" BeforeTargets="CustomBuild" Condition="'$(ForceRepack)'=='true'">
+    <Delete Files="$(OutDir)eBPF-for-Windows-Redist.$(Platform)$(NugetConfigSuffix).$(EbpfVersion).nupkg" />
+  </Target>
+</Project>
