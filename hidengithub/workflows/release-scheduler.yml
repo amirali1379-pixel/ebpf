@@ -1,0 +1,57 @@
+# Copyright (c) eBPF for Windows contributors
+# SPDX-License-Identifier: MIT
+
+# This workflow is triggered on the first day of every month, and creates an issue for releasing eBPF for Windows.
+---
+name: Release scheduler
+on:
+  schedule:
+    - cron: 0 0 1 * *
+
+permissions:
+  contents: read
+
+jobs:
+  create_release_issue:
+    name: Create release task
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+
+      - name: Create release task
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          TITLE: Scheduled eBPF release is due
+          LABELS: release
+          BODY: |
+            This is an automated reminder that a new release for eBPF is scheduled to be created:
+
+            - [ ] Ensure SPGO data is regenerated and added to the repo using performance test suite.
+            - [ ] Follow instructions in [ReleaseProcess.md](https://github.com/microsoft/ebpf-for-windows/blob/main/docs/ReleaseProcess.md).
+            - [ ] After publishing the release, update the regression tests to point to the release that is now N-1.
+            - [ ] Sync the internal `undock` and follow the internal release instructions in `\.internal\docs\ReleaseEbpfRedistProcess.md`.
+
+        with:
+          script: |
+            const owner = process.env.GITHUB_REPOSITORY.split('/')[0]
+            const repo = process.env.GITHUB_REPOSITORY.split('/')[1]
+            const body = process.env.BODY;
+            const title = process.env.TITLE;
+            const labels = process.env.LABELS;
+            const label_array = labels ? labels.split(',') : [];
+            console.log(`Creating issue ${title}`);
+            await github.rest.issues.create({
+              owner: owner,
+              repo: repo,
+              title: title,
+              body: body,
+              labels: label_array,
+            });
