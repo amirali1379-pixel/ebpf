@@ -1,0 +1,987 @@
+// Copyright (c) eBPF for Windows contributors
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#include "ebpf_core_structs.h"
+#include "ebpf_execution_type.h"
+#include "ebpf_program_attach_type_guids.h"
+#include "ebpf_program_types.h"
+#include "ebpf_result.h"
+
+#include <specstrings.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+#include <stdexcept>
+#define EBPF_NO_EXCEPT noexcept
+extern "C"
+{
+#else
+#define EBPF_NO_EXCEPT
+#endif
+
+    typedef int32_t fd_t;
+    extern __declspec(selectany) const fd_t ebpf_fd_invalid = -1;
+    typedef intptr_t ebpf_handle_t;
+
+    typedef struct _ebpf_btf_resolved_function_info
+    {
+        GUID module_guid;
+        ebpf_btf_resolved_function_prototype_t prototype;
+    } ebpf_btf_resolved_function_info_t;
+
+    struct bpf_object;
+    struct bpf_program;
+    struct bpf_map;
+    struct bpf_link;
+
+    /**
+     * @brief Query info about an eBPF program.
+     * @param[in] fd File descriptor of an eBPF program.
+     * @param[out] execution_type On success, contains the execution type.
+     * @param[out] file_name On success, contains the file name.
+     * @param[out] section_name On success, contains the section name.
+     * @retval EBPF_SUCCESS The operation was successful.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_program_query_info(
+        fd_t fd,
+        _Out_ ebpf_execution_type_t* execution_type,
+        _Outptr_result_z_ const char** file_name,
+        _Outptr_result_z_ const char** section_name) EBPF_NO_EXCEPT;
+
+    typedef struct _ebpf_stat
+    {
+        struct _ebpf_stat* next;
+        _Field_z_ const char* key;
+        int value;
+    } ebpf_stat_t;
+
+    typedef struct _ebpf_api_program_info
+    {
+        struct _ebpf_api_program_info* next;
+        _Field_z_ const char* section_name;
+        _Field_z_ const char* program_name;
+        ebpf_program_type_t program_type;
+        ebpf_attach_type_t expected_attach_type;
+        size_t raw_data_size;
+        _Field_size_(raw_data_size) char* raw_data;
+        ebpf_stat_t* stats;
+        size_t offset_in_section; // Byte offset of program in section.
+    } ebpf_api_program_info_t;
+
+    /**
+     * @brief Get list of programs and stats in an eBPF file.
+     * @param[in] file Name of file containing eBPF programs.
+     * @param[in] verbose Obtain additional info about the programs.
+     * @param[out] infos On success points to a list of eBPF programs.
+     * The caller is responsible for freeing the list via ebpf_free_programs().
+     * @param[out] error_message On failure points to a text description of
+     *  the error.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_enumerate_programs(
+        _In_z_ const char* file,
+        bool verbose,
+        _Outptr_result_maybenull_ ebpf_api_program_info_t** infos,
+        _Outptr_result_maybenull_z_ const char** error_message) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Free memory returned from \ref ebpf_enumerate_programs.
+     * @param[in] data Memory to free.
+     */
+    void
+    ebpf_free_programs(_In_opt_ _Post_invalid_ ebpf_api_program_info_t* infos) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Convert an eBPF program to human readable byte code.
+     * @param[in] file Name of ELF file containing eBPF program.
+     * @param[in] section_name The name of the section to disassemble.
+     *  If NULL, the first program section is used.
+     * @param[in] program_name The name of the program to disassemble.
+     *  If NULL, the first program in the section is used.
+     * @param[out] disassembly On success points text version of the program.
+     * @param[out] error_message On failure points to a text description of
+     *  the error.
+     */
+    uint32_t
+    ebpf_api_elf_disassemble_program(
+        _In_z_ const char* file,
+        _In_opt_z_ const char* section_name,
+        _In_opt_z_ const char* program_name,
+        _Outptr_result_maybenull_z_ const char** disassembly,
+        _Outptr_result_maybenull_z_ const char** error_message) EBPF_NO_EXCEPT;
+
+    typedef struct
+    {
+        int total_unreachable;
+        int total_warnings;
+        int max_loop_count;
+    } ebpf_api_verifier_stats_t;
+
+    /**
+     * @brief Per-instruction map annotation from the verifier.
+     * For map helper calls where the verifier can prove which map is being used,
+     * this carries the map identity and type information.
+     */
+    typedef struct _ebpf_verifier_map_info
+    {
+        uint32_t instruction_offset; ///< BPF program counter of the CALL instruction.
+        int32_t helper_id;           ///< Helper function ID (e.g., BPF_FUNC_map_lookup_elem).
+        const char* map_name;        ///< Map name from ELF (NULL if ambiguous).
+        uint32_t map_type;           ///< Map type (e.g., BPF_MAP_TYPE_ARRAY).
+        uint32_t value_size;         ///< Map value size in bytes.
+        uint32_t max_entries;        ///< Map maximum entries.
+        bool is_inner_map_template;  ///< True if this map is only an inner map template.
+    } ebpf_verifier_map_info_t;
+
+    /**
+     * @brief Get map annotations from the most recent verification.
+     * @param[out] annotations Pointer to the annotation array (owned by TLS, do not free).
+     * @param[out] count Number of annotations.
+     * @retval EBPF_SUCCESS Success.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_get_map_annotations_from_verifier(
+        _Outptr_result_buffer_maybenull_(*count) const ebpf_verifier_map_info_t** annotations,
+        _Out_ size_t* count) EBPF_NO_EXCEPT;
+
+    typedef enum _ebpf_verification_verbosity
+    {
+        EBPF_VERIFICATION_VERBOSITY_NORMAL = 0,
+        EBPF_VERIFICATION_VERBOSITY_INFORMATIONAL = 1,
+        EBPF_VERIFICATION_VERBOSITY_VERBOSE = 2,
+    } ebpf_verification_verbosity_t;
+
+    /**
+     * @brief Verify that the program is safe to execute.
+     * @param[in] file Name of ELF file containing eBPF program.
+     * @param[in] section_name The name of the section in which the program exists.
+     *  If NULL, the first code section is used.
+     * @param[in] program_name The name of the program to verify.
+     *  If NULL, the first program in the section is used.
+     * @param[in] program_type Optional program type.
+     *  If NULL, the program type is derived from the section name.
+     * @param[in] verbosity How much additional info about the programs to obtain.
+     * @param[out] report Points to a text section describing why the program
+     *  failed verification.
+     * @param[out] error_message On failure points to a text description of
+     *  the error.
+     * @param[out] stats If non-NULL, returns verification statistics.
+     * @retval 0 Verification succeeded.
+     * @retval 1 Verification failed.
+     */
+    _Success_(return == 0) uint32_t ebpf_api_elf_verify_program_from_file(
+        _In_z_ const char* file,
+        _In_opt_z_ const char* section_name,
+        _In_opt_z_ const char* program_name,
+        _In_opt_ const ebpf_program_type_t* program_type,
+        ebpf_verification_verbosity_t verbosity,
+        _Outptr_result_maybenull_z_ const char** report,
+        _Outptr_result_maybenull_z_ const char** error_message,
+        _Out_opt_ ebpf_api_verifier_stats_t* stats) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Verify that the program is safe to execute.
+     * @param[in] data Memory containing the ELF file containing eBPF program.
+     * @param[in] data_length Length of data.
+     * @param[in] section_name The name of the section in which the program exists.
+     *  If NULL, the first code section is used.
+     * @param[in] program_name The name of the program to verify.
+     *  If NULL, the first program in the section is used.
+     * @param[in] program_type Optional program type.
+     *  If NULL, the program type is derived from the section name.
+     * @param[in] verbosity How much additional info about the programs to obtain.
+     * @param[out] report Points to a text section describing why the program
+     *  failed verification.
+     * @param[out] error_message On failure points to a text description of
+     *  the error.
+     * @param[out] stats If non-NULL, returns verification statistics.
+     * @retval 0 Verification succeeded.
+     * @retval 1 Verification failed.
+     */
+    _Success_(return == 0) uint32_t ebpf_api_elf_verify_program_from_memory(
+        _In_reads_(data_length) const char* data,
+        size_t data_length,
+        _In_opt_z_ const char* section_name,
+        _In_opt_z_ const char* program_name,
+        _In_opt_ const ebpf_program_type_t* program_type,
+        ebpf_verification_verbosity_t verbosity,
+        _Outptr_result_maybenull_z_ const char** report,
+        _Outptr_result_maybenull_z_ const char** error_message,
+        _Out_opt_ ebpf_api_verifier_stats_t* stats) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Free memory for a string returned from an eBPF API.
+     * @param[in] string Memory to free.
+     */
+    void
+    ebpf_free_string(_In_opt_ _Post_invalid_ const char* string) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Dissociate a name with an object handle.
+     * @param[in] name Name to dissociate.
+     * @param[in] name_length Length in bytes of the name.
+     */
+    uint32_t
+    ebpf_api_unpin_object(const uint8_t* name, uint32_t name_length) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Unpin the object from the specified path.
+     * @param[in] path Path from which to unpin.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_object_unpin(_In_z_ const char* path) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Obtain information about the eBPF object referred to by bpf_fd.
+     * This function populates up to info_len bytes of info, which will
+     * be in one of the following formats depending on the eBPF object type of
+     * bpf_fd:
+     *
+     * * struct bpf_link_info
+     * * struct bpf_map_info
+     * * struct bpf_prog_info
+     *
+     * @param[in] bpf_fd File descriptor referring to an eBPF object.
+     * @param[in, out] info Pointer to memory in which to write the info obtained.
+     * On input, contains any additional parameters to use. May be NULL in order to
+     * only retrieve the type of the object.
+     * @param[in, out] info_size On input, contains the maximum number of bytes to
+     * write into the info. On output, contains the actual number of bytes written.
+     * May be NULL if info is NULL.
+     * @param[out] type Optional type of the object.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_ARGUMENT One or more parameters are wrong.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_object_get_info_by_fd(
+        fd_t bpf_fd,
+        _Inout_updates_bytes_to_opt_(*info_size, *info_size) void* info,
+        _Inout_opt_ uint32_t* info_size,
+        _Out_opt_ ebpf_object_type_t* type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Detach the eBPF program from the link.
+     *
+     * @param[in] link_handle Handle to the link.
+     *
+     * @retval EBPF_SUCCESS The operations succeeded.
+     * @retval EBPF_INVALID_ARGUMENT The link handle is invalid.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_api_unlink_program(ebpf_handle_t link_handle) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Close an eBPF handle.
+     *
+     * @param[in] handle Handle to close.
+     * @retval EBPF_SUCCESS Handle was closed.
+     * @retval EBPF_INVALID_OBJECT Handle is not valid.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_api_close_handle(ebpf_handle_t handle) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Returns an array of \ref ebpf_map_info_t for all pinned maps.
+     *
+     * @param[out] map_count Number of pinned maps.
+     * @param[out] map_info Array of ebpf_map_info_t for pinned maps.
+     *
+     * @retval EBPF_SUCCESS The API succeeded.
+     * @retval EBPF_NO_MEMORY Out of memory.
+     * @retval EBPF_INVALID_ARGUMENT One or more parameters are wrong.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_api_get_pinned_map_info(
+        _Out_ uint16_t* map_count,
+        _Outptr_result_buffer_maybenull_(*map_count) ebpf_map_info_t** map_info) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Helper Function to free array of \ref ebpf_map_info_t allocated by
+     * \ref ebpf_api_get_pinned_map_info function.
+     *
+     * @param[in] map_count Length of array to be freed.
+     * @param[in] map_info Map to be freed.
+     */
+    void
+    ebpf_api_map_info_free(
+        uint16_t map_count,
+        _In_opt_count_(map_count) _Post_ptr_invalid_ const ebpf_map_info_t* map_info) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get the execution type for an eBPF object file.
+     *
+     * @param[in] object The eBPF object file.
+     *
+     * @returns Execution type.
+     */
+    ebpf_execution_type_t
+    ebpf_object_get_execution_type(_In_ const struct bpf_object* object) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Set the execution type for an eBPF object file.
+     *
+     * @param[in, out] object The eBPF object file.
+     * @param[in] execution_type Execution type to set.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_ARGUMENT One or more parameters are incorrect.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_object_set_execution_type(_Inout_ struct bpf_object* object, ebpf_execution_type_t execution_type)
+        EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Load a native image from a file and return map and program file
+     * descriptors.
+     *
+     * @param[in] file_name Path to the eBPF object file.
+     * @param[in, out] count_of_maps Size of map_fds.
+     * @param[in] map_fds Pre-allocated array for map file descriptors.
+     * @param[in, out] count_of_programs Size of program_fds.
+     * @param[in] program_fds Pre-allocated array for program file descriptors.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_NO_MEMORY Either count_of_maps or count_of_programs was too small.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_object_load_native_by_fds(
+        _In_z_ const char* file_name,
+        _Inout_ size_t* count_of_maps,
+        _Out_writes_opt_(*count_of_maps) fd_t* map_fds,
+        _Inout_ size_t* count_of_programs,
+        _Out_writes_opt_(*count_of_programs) fd_t* program_fds) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Attach an eBPF program.
+     *
+     * @param[in] program Pointer to the eBPF program.
+     * @param[in] attach_type Optionally, the attach type for attaching the program.
+     *  If attach type is not specified, then the earlier provided attach type
+     *  or attach type derived from section prefix will be used to attach the
+     *  program.
+     * @param[in] attach_params_size Size of the attach parameters.
+     * @param[in] attach_parameters Optionally, attach parameters. This is an
+     *  opaque flat buffer containing the attach parameters which is interpreted
+     *  by the extension provider.
+     * @param[out] link Pointer to ebpf_link structure or NULL if the caller is not
+     * interested in the link.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_program_attach(
+        _In_ const struct bpf_program* program,
+        _In_opt_ const ebpf_attach_type_t* attach_type,
+        _In_reads_bytes_opt_(attach_params_size) void* attach_parameters,
+        size_t attach_params_size,
+        _Outptr_opt_ struct bpf_link** link) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Attach an eBPF program by program file descriptor.
+     *
+     * @param[in] program_fd An eBPF program file descriptor.
+     * @param[in] attach_type Optionally, the attach type for attaching the program.
+     *  If attach type is not specified, then the earlier provided attach type
+     *  or attach type derived from section prefix will be used to attach the
+     *  program.
+     * @param[in] attach_parameters_size Size of the attach parameters.
+     * @param[in] attach_parameters Optionally, attach parameters. This is an
+     *  opaque flat buffer containing the attach parameters which is interpreted
+     *  by the extension provider.
+     * @param[out] link Pointer to ebpf_link structure or NULL if the caller is not
+     * interested in the link.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_program_attach_by_fd(
+        fd_t program_fd,
+        _In_opt_ const ebpf_attach_type_t* attach_type,
+        _In_reads_bytes_opt_(attach_parameters_size) void* attach_parameters,
+        size_t attach_parameters_size,
+        _Outptr_opt_ struct bpf_link** link) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Attach an eBPF program by program file descriptor and return
+     * the link as a file descriptor.
+     *
+     * @see ebpf_program_attach_by_fd
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_program_attach_by_fds(
+        fd_t program_fd,
+        _In_opt_ const ebpf_attach_type_t* attach_type,
+        _In_reads_bytes_opt_(attach_parameters_size) void* attach_parameters,
+        size_t attach_parameters_size,
+        _Out_opt_ fd_t* link) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Detach an eBPF program from an attach point represented by
+     *  the bpf_link structure.
+     *
+     * @param[in, out] link Pointer to bpf_link structure.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_OBJECT Invalid object was passed.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_link_detach(_Inout_ struct bpf_link* link) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Detach an eBPF program.
+     *
+     * @param[in] program_fd File descriptor of program to detach. If set to -1,
+     * this parameter is ignored.
+     * @param[in] attach_type The attach type for attaching the program.
+     * @param[in] attach_parameter_size Size of the attach parameter.
+     * @param[in] attach_parameter Pointer to attach parameter. This is an
+     *  opaque flat buffer containing the attach parameters which is interpreted
+     *  by the extension provider.
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_OBJECT Invalid object was passed.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_program_detach(
+        fd_t program_fd,
+        _In_ const ebpf_attach_type_t* attach_type,
+        _In_reads_bytes_(attach_parameter_size) void* attach_parameter,
+        size_t attach_parameter_size) EBPF_NO_EXCEPT;
+
+    /**
+     * Clean up and free bpf_link structure. Also close the
+     * underlying link fd.
+     *
+     * @param[in] link Pointer to the bpf_link structure.
+     *
+     *
+     * @sa bpf_link__destroy
+     * @sa bpf_link_detach
+     */
+    void
+    ebpf_link_close(_Frees_ptr_ struct bpf_link* link) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Close a file descriptor. Also close the underlying handle.
+     * @param [in] fd File descriptor to be closed.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_FD Invalid fd was provided.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_close_fd(fd_t fd) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Duplicate a file descriptor.
+     *
+     * @param [in] fd File descriptor to be duplicated.
+     * @param [out] dup Duplicated file descriptor.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_duplicate_fd(fd_t fd, _Out_ fd_t* dup) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get eBPF program type and expected attach type by name.
+     *
+     * @param[in] name Name, as if it were a section name in an ELF file.
+     * @param[out] program_type eBPF program type.
+     * @param[out] expected_attach_type Expected eBPF attach type.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_KEY_NOT_FOUND No program type was found.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_get_program_type_by_name(
+        _In_z_ const char* name,
+        _Out_ ebpf_program_type_t* program_type,
+        _Out_ ebpf_attach_type_t* expected_attach_type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get the name of a given program type.
+     *
+     * @param[in] program_type Program type.
+     *
+     * @returns Name of the program type, or NULL if not found.
+     */
+    _Ret_maybenull_z_ const char*
+    ebpf_get_program_type_name(_In_ const ebpf_program_type_t* program_type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get the name of a given attach type.
+     *
+     * @param[in] attach_type Attach type.
+     *
+     * @returns Name of the attach type, or NULL if not found.
+     */
+    _Ret_maybenull_z_ const char*
+    ebpf_get_attach_type_name(_In_ const ebpf_attach_type_t* attach_type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Retrieve the next pinned path of an eBPF object.
+     *
+     * @param[in] start_path Path to look for an entry greater than.
+     * @param[out] next_path Returns the next path in lexicographical order, if one exists.
+     * @param[in] next_path_len Length of the next path buffer.
+     * @param[in, out] type On input, the type of object to retrieve or EBPF_OBJECT_UNKNOWN.
+     *                      On output, the type of the object.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval other An error occurred.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_get_next_pinned_object_path(
+        _In_z_ const char* start_path,
+        _Out_writes_z_(next_path_len) char* next_path,
+        size_t next_path_len,
+        _Inout_ ebpf_object_type_t* type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Canonicalize a path using filesystem canonicalization rules.
+     *
+     * @param[out] output Buffer in which to write canonicalized path.
+     * @param[in] output_size Size of output buffer.
+     * @param[out] error_code Zero on success, non-zero Win32 error code on failure.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_ARGUMENT The input path was invalid.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_canonicalize_pin_path(_Out_writes_(output_size) char* output, size_t output_size, _In_z_ const char* input)
+        EBPF_NO_EXCEPT;
+
+    typedef struct _ebpf_program_info ebpf_program_info_t;
+
+    /**
+     * @brief Get the set of program information used by the verifier during
+     * the last verification.
+     *
+     * @param[out] program_info Pointer to the program information used to
+     * verify the program.
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_OBJECT_NOT_FOUND No program information was found.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_get_program_info_from_verifier(_Outptr_ const ebpf_program_info_t** program_info) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get BTF-resolved function metadata from the verifier cache for the last verification.
+     *
+     * @param[in] btf_id Session-local BTF ID assigned during verification.
+     * @param[out] function_info Pointer to the BTF-resolved function metadata.
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_OBJECT_NOT_FOUND No BTF-resolved function was found for the supplied ID.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_get_btf_resolved_function_info_from_verifier(
+        int32_t btf_id, _Outptr_ const ebpf_btf_resolved_function_info_t** function_info) EBPF_NO_EXCEPT;
+
+    typedef struct _ebpf_test_run_options
+    {
+        _Readable_bytes_(data_size_in) const uint8_t* data_in; ///< Input data to the program.
+        _Writable_bytes_(data_size_out) uint8_t* data_out;     ///< Output data from the program.
+        size_t data_size_in;                                   ///< Size of input data.
+        size_t data_size_out; ///< Maximum length of data_out on input and actual length of data_out on output.
+        _Readable_bytes_(context_size_in) const uint8_t* context_in; ///< Input context to the program.
+        _Writable_bytes_(context_size_out) uint8_t* context_out;     ///< Output context from the program.
+        size_t context_size_in;                                      ///< Size of input context.
+        size_t context_size_out; ///< Maximum length of context_out on input and actual length of context_out on output.
+        uint64_t return_value;   ///< Return value from the program.
+        size_t repeat_count;     ///< Number of times to repeat the program.
+        uint64_t duration;       ///< Duration in nanoseconds of the program execution.
+        uint32_t flags;          ///< Flags to control the test run.
+        uint32_t cpu;            ///< CPU to run the program on.
+        size_t batch_size;       ///< Number of times to repeat the program in a batch.
+    } ebpf_test_run_options_t;
+
+    /**
+     * @brief Run the program in the eBPF VM, measure the execution time, and return the result.
+     *
+     * @param[in] program_fd File descriptor of the program to run.
+     * @param[in,out] options Options to control the test run and results.
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_OBJECT Invalid object was passed.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_program_test_run(fd_t program_fd, _Inout_ ebpf_test_run_options_t* options) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Write data into the ring buffer map.
+     *
+     * @deprecated Use the polling-based ring buffer APIs (ring_buffer__new, ring_buffer__poll, ring_buffer__consume)
+     * and map producer helpers instead.
+     *
+     * @param [in] ring_buffer_map_fd ring buffer map file descriptor.
+     * @param [in]  data Pointer to data to be written.
+     * @param [in] data_length Length of data to be written.
+     * @retval EPBF_SUCCESS Successfully wrote record into ring buffer.
+     * @retval EBPF_OUT_OF_SPACE Unable to output to ring buffer due to inadequate space.
+     * @retval EBPF_NO_MEMORY Out of memory.
+     */
+    _Must_inspect_result_ __declspec(deprecated("Use polling-based ring buffer APIs instead.")) ebpf_result_t
+    ebpf_ring_buffer_map_write(
+        fd_t ring_buffer_map_fd, _In_reads_bytes_(data_length) const void* data, size_t data_length) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Map the memory of a map.
+     *
+     * Calling this multiple times will create distinct mappings.
+     *
+     * @param[in] map_fd File descriptor to map.
+     * @param[out] data Pointer to the mapped data buffer.
+     * @param[in] offset Offset into the mapped data buffer.
+     * @param[in] size Size of the mapping.
+     * @param[in] page_protection Page protection for the mapping (PAGE_READONLY, PAGE_READWRITE).
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval other An error occurred.
+     * @sa ebpf_ring_buffer_map_unmap_buffer
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_ring_buffer_map_map_buffer(
+        fd_t map_fd,
+        _Outptr_result_maybenull_ void** consumer,
+        _Outptr_result_maybenull_ const void** producer,
+        _Outptr_result_buffer_maybenull_(*data_size) const uint8_t** data,
+        _Out_ size_t* data_size) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Unmap the memory of a map.
+     *
+     * @param[in] map_fd File descriptor to map.
+     * @param[in] consumer Pointer to the consumer buffer.
+     * @param[in] producer Pointer to the producer buffer.
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval other An error occurred.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_ring_buffer_map_unmap_buffer(
+        fd_t map_fd, _In_opt_ void* consumer, _In_opt_ const void* producer, _In_opt_ const void* data) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Set the wait handle that will be signaled for new data.
+     *
+     * For ring buffer maps the index must be zero.
+     *
+     * @note Overwrites the wait handle currently stored in the map.
+     *
+     * @param[in] map_fd File descriptor to ring buffer or perf event array map.
+     * @param[in] index Map-specific index of wait handle to set.
+     * @param[in] handle Wait handle to signal events on.
+     *
+     * @returns Wait handle
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_map_set_wait_handle(fd_t map_fd, uint64_t index, ebpf_handle_t handle) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get eBPF program type for the specified BPF program type.
+     *
+     * @param[in] program_type BPF program type.
+     *
+     * @returns Pointer to eBPF program type, or NULL if not found.
+     */
+    _Ret_maybenull_ const ebpf_program_type_t*
+    ebpf_get_ebpf_program_type(bpf_prog_type_t bpf_program_type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get eBPF attach type for the specified BPF attach type.
+     *
+     * @param[in] bpf_attach_type BPF attach type.
+     * @param[out] ebpf_attach_type eBPF attach type or GUID_NULL.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_ARGUMENT The attach type is unknown.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_get_ebpf_attach_type(bpf_attach_type_t bpf_attach_type, _Out_ ebpf_attach_type_t* ebpf_attach_type)
+        EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get BPF program type for the specified eBPF program type.
+     *
+     * @param[in] program_type eBPF program type GUID.
+     *
+     * @returns BPF program type, or BPF_PROG_TYPE_UNSPEC if not found.
+     */
+    bpf_prog_type_t
+    ebpf_get_bpf_program_type(_In_ const ebpf_program_type_t* program_type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get BPF attach type for the specified eBPF attach type.
+     *
+     * @param[in] attach_type eBPF attach type GUID.
+     *
+     * @returns BPF attach type, or BPF_ATTACH_TYPE_UNSPEC if not found.
+     */
+    bpf_attach_type_t
+    ebpf_get_bpf_attach_type(_In_ const ebpf_attach_type_t* ebpf_attach_type) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Write data into the perf event array map.
+     *
+     * @deprecated Use the polling-based perf buffer APIs (perf_buffer__new, perf_buffer__poll, perf_buffer__consume)
+     * and BPF helper output path instead.
+     *
+     * @param [in] perf_event_array_map_fd perf event array map file descriptor.
+     * @param [in] data Pointer to data to be written.
+     * @param [in] data_length Length of data to be written.
+     * @retval EPBF_SUCCESS Successfully wrote record into perf event array.
+     * @retval EBPF_OUT_OF_SPACE Unable to output to perf event array due to inadequate space.
+     * @retval EBPF_NO_MEMORY Out of memory.
+     */
+    _Must_inspect_result_ __declspec(deprecated("Use polling-based perf buffer APIs instead.")) ebpf_result_t
+    ebpf_perf_event_array_map_write(
+        fd_t perf_event_array_map_fd,
+        _In_reads_bytes_(data_length) const void* data,
+        size_t data_length) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Wait for currently executing eBPF programs to complete.
+     *
+     * @retval EBPF_SUCCESS Successfully synchronized.
+     * @retval EBPF_OUT_OF_SPACE Unable perform the operation due to insufficient space.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_program_synchronize() EBPF_NO_EXCEPT;
+
+    //
+    // Windows-specific Ring Buffer APIs
+    //
+
+    // Forward declarations and types needed for ring buffer APIs.
+    struct ring_buffer;
+
+    /**
+     * @brief Ring buffer consumer page definition (public API).
+     *
+     * Definition of the consumer-writeable portion of the ring buffer metadata.
+     * This page is read+write for the consumer and the producer only reads it.
+     */
+    typedef struct _ebpf_ring_buffer_consumer_page
+    {
+        volatile uint64_t consumer_offset; ///< Consumer has read up to this offset.
+    } ebpf_ring_buffer_consumer_page_t;
+
+    /**
+     * @brief Ring buffer producer page definition (public API).
+     *
+     * Definition of the producer-writeable portion of the ring buffer metadata.
+     * This page is read+write for the producer and read-only for the consumer.
+     */
+    typedef struct _ebpf_ring_buffer_producer_page
+    {
+        volatile uint64_t producer_offset; ///< Producer(s) have reserved up to this offset.
+    } ebpf_ring_buffer_producer_page_t;
+
+    /**
+     * @brief Perf event array map producer page.
+     *
+     * Extends ring_buffer producer page with lost counter.
+     */
+    typedef struct _ebpf_perf_event_array_producer_page
+    {
+        volatile uint64_t producer_offset; ///< Producer(s) have reserved up to this offset.
+        uint64_t pad[7];                   ///< Padding to 64 bytes (to place lost_records in next cache line).
+        volatile uint64_t lost_records;    ///< Number of lost records.
+    } ebpf_perf_event_array_producer_page_t;
+
+    // Compile-time asserts: perf event array producer page must begin with ring buffer producer page layout.
+    static_assert(
+        offsetof(ebpf_perf_event_array_producer_page_t, producer_offset) ==
+            offsetof(ebpf_ring_buffer_producer_page_t, producer_offset),
+        "ebpf_perf_event_array_producer_page_t.producer_offset must be at the same offset as in "
+        "ebpf_ring_buffer_producer_page_t");
+    static_assert(
+        sizeof(ebpf_ring_buffer_producer_page_t) <= sizeof(ebpf_perf_event_array_producer_page_t),
+        "ebpf_perf_event_array_producer_page_t must be at least as large as ebpf_ring_buffer_producer_page_t");
+    static_assert(
+        offsetof(ebpf_perf_event_array_producer_page_t, lost_records) >= 64,
+        "lost_records must be in a separate cache line from producer_offset");
+
+    /**
+     * @brief Ring buffer sample callback function type.
+     * @param[in] ctx User-provided context.
+     * @param[in] data Pointer to sample data.
+     * @param[in] size Size of sample data.
+     * @returns 0 on success, negative value on error.
+     */
+    typedef int (*ring_buffer_sample_fn)(void* ctx, void* data, size_t size);
+
+    /**
+     * @brief Windows-specific ring buffer options structure.
+     *
+     * This structure extends ring_buffer_opts with Windows-specific fields.
+     * The first field(s) must match ring_buffer_opts exactly for compatibility.
+     */
+    struct ebpf_ring_buffer_opts
+    {
+        size_t sz;      /* Size of this struct, for forward/backward compatibility (must match ring_buffer_opts). */
+        uint64_t flags; /* Windows-specific ring buffer option flags. */
+    };
+
+    /**
+     * @brief Ring buffer option flags.
+     * @deprecated EBPF_RINGBUF_FLAG_AUTO_CALLBACK is deprecated. Prefer polling mode (flags = 0).
+     */
+    enum ebpf_ring_buffer_flags
+    {
+        EBPF_RINGBUF_FLAG_AUTO_CALLBACK = (uint64_t)1 << 0, /* Deprecated: Automatically invoke callback. */
+    };
+
+    /**
+     * @brief Creates a new ring buffer manager (Windows-specific with flags support).
+     *
+     * @deprecated Use ring_buffer__new() (or ebpf_ring_buffer__new() with flags set to 0) and consume records via
+     * ring_buffer__poll()/ring_buffer__consume().
+     *
+     * @param[in] map_fd File descriptor to ring buffer map.
+     * @param[in] sample_cb Pointer to ring buffer notification callback function.
+     * @param[in] ctx Pointer to sample_cb callback function context.
+     * @param[in] opts Ring buffer options with flags support.
+     *
+     * @returns Pointer to ring buffer manager, or NULL on error.
+     */
+    _Ret_maybenull_ __declspec(deprecated("Use ring_buffer__new() polling mode instead.")) struct ring_buffer*
+    ebpf_ring_buffer__new(
+        int map_fd,
+        ring_buffer_sample_fn sample_cb,
+        _In_opt_ void* ctx,
+        _In_opt_ const struct ebpf_ring_buffer_opts* opts) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get pointers to the consumer, producer, and data regions for a specific ring buffer map.
+     *
+     * Gets mapped memory pointers for the specified ring buffer map in the manager.
+     * For multiple maps, use the index parameter to select which map to access.
+     *
+     * @param[in] rb Ring buffer manager.
+     * @param[in] index Index of the map in the ring buffer manager (0-based).
+     * @param[out] consumer_page Pointer to start of read-write mapped consumer page.
+     * @param[out] producer_page Pointer to start of read-only mapped producer page.
+     * @param[out] data Pointer to start of read-only double-mapped data pages.
+     * @param[out] data_size Size of the mapped data buffer.
+     *
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INVALID_ARGUMENT Invalid argument.
+     * @retval EBPF_OBJECT_NOT_FOUND No maps in the ring buffer manager or index out of range.
+     * @retval other An error occurred.
+     */
+    _Must_inspect_result_ _Success_(return == EBPF_SUCCESS) ebpf_result_t ebpf_ring_buffer_get_buffer(
+        _In_ struct ring_buffer* rb,
+        uint32_t index,
+        _Outptr_result_maybenull_ ebpf_ring_buffer_consumer_page_t** consumer_page,
+        _Outptr_result_maybenull_ const ebpf_ring_buffer_producer_page_t** producer_page,
+        _Outptr_result_buffer_maybenull_(*data_size) const uint8_t** data,
+        _Out_ uint64_t* data_size) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get the wait handle for a ring buffer manager.
+     *
+     * Gets the shared wait handle for the ring buffer manager.
+     * - All maps in the manager share the same wait handle for producers to signal.
+     *
+     * Use ebpf_map_set_wait_handle() to set the wait handle for a specific map.
+     *
+     * @param[in] rb Ring buffer manager.
+     *
+     * @returns Wait handle for the ring buffer manager, or ebpf_handle_invalid on error.
+     */
+    ebpf_handle_t
+    ebpf_ring_buffer_get_wait_handle(_In_ struct ring_buffer* rb) EBPF_NO_EXCEPT;
+
+    //
+    // Windows-specific Perf Buffer APIs
+    //
+
+    /**
+     * @brief Windows-specific perf buffer options structure.
+     */
+    struct ebpf_perf_buffer_opts
+    {
+        size_t sz;      /* size of this struct, for forward/backward compatibility */
+        uint64_t flags; /* perf buffer option flags */
+    };
+
+    /**
+     * @brief Perf buffer option flags (Windows-specific).
+     * @deprecated EBPF_PERFBUF_FLAG_AUTO_CALLBACK is deprecated. Prefer polling mode (flags = 0).
+     */
+    enum ebpf_perf_buffer_flags
+    {
+        EBPF_PERFBUF_FLAG_AUTO_CALLBACK = (uint64_t)1 << 0, /* Deprecated: Automatically invoke callback. */
+    };
+    typedef void (*perf_buffer_sample_fn)(void* ctx, int cpu, void* data, uint32_t size);
+    typedef void (*perf_buffer_lost_fn)(void* ctx, int cpu, uint64_t cnt);
+
+    /**
+     * @brief Create a new perf buffer manager with Windows-specific options.
+     *
+     * @deprecated Use perf_buffer__new() (or ebpf_perf_buffer__new() with flags set to 0) and consume records via
+     * perf_buffer__poll()/perf_buffer__consume().
+     *
+     * @param[in] map_fd File descriptor of BPF_MAP_TYPE_PERF_EVENT_ARRAY map.
+     * @param[in] page_cnt Number of memory pages allocated for each per-CPU buffer. Should be set to 0.
+     * @param[in] sample_cb Function called on each received data record.
+     * @param[in] lost_cb Function called when record loss has occurred.
+     * @param[in] ctx User-provided context passed into sample_cb and lost_cb.
+     * @param[in] opts Windows-specific perf buffer manager options.
+     *
+     * @returns Pointer to perf buffer manager on success, null on error.
+     */
+    _Ret_maybenull_ __declspec(deprecated("Use perf_buffer__new() polling mode instead.")) struct perf_buffer*
+    ebpf_perf_buffer__new(
+        int map_fd,
+        size_t page_cnt,
+        perf_buffer_sample_fn sample_cb,
+        perf_buffer_lost_fn lost_cb,
+        _In_opt_ void* ctx,
+        _In_opt_ const struct ebpf_perf_buffer_opts* opts) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Get the wait handle for a perf buffer manager.
+     *
+     * Gets the shared wait handle for the perf buffer manager.
+     * - All per-cpu rings in the manager share the same wait handle for producers to signal.
+     *
+     * Use ebpf_map_set_wait_handle() to set the wait handle for a specific map.
+     *
+     * @param[in] pb Perf buffer manager.
+     *
+     * @returns Wait handle for the perf buffer manager, or ebpf_handle_invalid on error.
+     */
+    ebpf_handle_t
+    ebpf_perf_buffer_get_wait_handle(_In_ const struct perf_buffer* pb) EBPF_NO_EXCEPT;
+
+    /**
+     * @brief Extract data from a named section in a PE or ELF file.
+     * @param[in] file_path Path to the PE or ELF file.
+     * @param[in] section_name Name of the section to extract.
+     * @param[out] data Pointer to buffer to receive section data. If NULL, only the size is returned.
+     * @param[in,out] data_size On input, size of the buffer. On output, actual size of section data.
+     * @retval EBPF_SUCCESS The operation was successful.
+     * @retval EBPF_INSUFFICIENT_BUFFER The buffer is too small. data_size contains required size.
+     * @retval EBPF_INVALID_ARGUMENT Invalid parameters.
+     * @retval EBPF_OBJECT_NOT_FOUND Section not found in file.
+     * @retval EBPF_INVALID_OBJECT File format is invalid or unsupported.
+     */
+    _Must_inspect_result_ ebpf_result_t
+    ebpf_api_get_data_section(
+        _In_z_ const char* file_path,
+        _In_z_ const char* section_name,
+        _Out_writes_bytes_opt_(*data_size) uint8_t* data,
+        _Inout_ size_t* data_size) EBPF_NO_EXCEPT;
+
+#ifdef __cplusplus
+}
+#endif
