@@ -1,0 +1,45 @@
+# Copyright (c) eBPF for Windows contributors
+# SPDX-License-Identifier: MIT
+
+param ($InputFile, $OutputFile, [parameter(Mandatory=$false)]$VCToolsRedistDir, [parameter(Mandatory=$false)]$architecture, [parameter(Mandatory=$false)]$configuration, [parameter(Mandatory=$false)]$ConfigSuffix)
+
+# The git commit ID is in the include directory and is in the format:
+# #define GIT_COMMIT_ID "some commit id"
+$git_commit_id = Get-Content -Path "$PSScriptRoot\..\include\git_commit_id.h" -Raw -Encoding UTF8
+$git_commit_id = $git_commit_id.Split('"')[1]
+
+$content = Get-Content -path "$PSScriptRoot\..\Directory.Build.props" -Raw -Encoding UTF8
+
+# Parse the XML content
+[xml]$xml = $content
+
+$VersionPropertyGroup = $xml.Project.PropertyGroup | Where-Object {$_.PSObject.Properties.Name -contains "Label" -and $_.Label -eq "Version"}
+
+# Get the version number
+$version = ""
+$version += $VersionPropertyGroup.EbpfVersion_Major + "."
+$version += $VersionPropertyGroup.EbpfVersion_Minor + "."
+$version += $VersionPropertyGroup.EbpfVersion_Revision
+if (-not [string]::IsNullOrEmpty($VersionPropertyGroup.EbpfVersion_Modifier)) {
+    $version += "-" + $VersionPropertyGroup.EbpfVersion_Modifier
+}
+
+$version_no_modifier = ""
+$version_no_modifier += $VersionPropertyGroup.EbpfVersion_Major + "."
+$version_no_modifier += $VersionPropertyGroup.EbpfVersion_Minor + "."
+$version_no_modifier += $VersionPropertyGroup.EbpfVersion_Revision
+
+$content = Get-Content $InputFile
+$content = $content.Replace("{version}", $version)
+$content = $content.Replace("{version_no_modifier}", $version_no_modifier)
+$content = $content.Replace("{VCToolsRedistDir}", $VCToolsRedistDir)
+$content = $content.Replace("{git_commit_id}", $git_commit_id)
+$content = $content.Replace("{architecture}", $architecture)
+if ($PSBoundParameters.ContainsKey('ConfigSuffix')) {
+    $content = $content.Replace("{configuration}", $ConfigSuffix)
+} elseif ($configuration -match "Release") {
+    $content = $content.Replace("{configuration}", "")
+} else {
+    $content = $content.Replace("{configuration}", ".$configuration")
+}
+set-content $OutputFile $content

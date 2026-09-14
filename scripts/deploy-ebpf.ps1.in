@@ -1,0 +1,198 @@
+# Copyright (c) eBPF for Windows contributors
+# SPDX-License-Identifier: MIT
+
+##
+## Initialize parameters
+##
+$source_directory="."
+
+# The following files are required for installing Debug & Release versions of eBPF for Windows.
+[System.Collections.ArrayList]$install_files = @(
+    "ebpf-for-windows.msi",
+    "setup-ebpf.ps1",
+    "vc_redist.x64.exe",
+    # VC++ Redistributable Debug Runtime DLLs.
+    "ucrtbased.dll"
+    )
+
+# The following files are only needed for testing and debugging.
+# Note: the \scripts\setup.vcxproj already copies the Debug VC++ Redist DLLs to the install directory, including the official Release installer.
+[System.Collections.ArrayList]$built_test_files = @(
+    "*.exe",
+    "*.dll",
+    "*.pdb",
+    "*.o",
+    "*.sys"
+    )
+
+# These files are the runtime & JIT service components already installed through the MSI.
+# Therefore, they will be excluded from the copy, for cleanness in the test directory.
+[System.Collections.ArrayList]$exclude_files = @(
+    "bpf2c.exe",
+    "bpf2c.pdb"
+    "bpftool.exe",
+    "bpftool.pdb",
+    "EbpfApi.dll",
+    "EbpfApi.pdb",
+    "EbpfCore.sys",
+    "EbpfCore.pdb",
+    "EbpfSvc.exe",
+    "EbpfSvc.pdb",
+    "ebpfnetsh.dll",
+    "ebpfnetsh.pdb",
+    "NetEbpfExt.sys",
+    "NetEbpfExt.pdb",
+    "ebpfforwindows.wprp",
+    "export_program_info.exe",
+    "export_program_info.pdb"
+)
+
+$source_directory="$PSScriptRoot"
+$destination_directory="C:\temp\eBPF"
+$copy_file_list = $install_files
+$vm="Windows 10 dev environment"
+$remote_vm = $null
+$error.clear()
+
+##
+## Process command-line options
+##
+foreach ($arg in $args) {
+    switch -regex ($arg) {
+    { @("-h", "--help") -contains $_ }
+        {
+            Write-Host @'
+
+OVERVIEW:
+
+Copies eBPF framework files into a given directory, on the local machine or into a VM.
+
+    $ deploy-ebpf [-h,--help] [-d,--dir[=path]] [--vm="..."] [-t,--test]
+
+OPTIONS:
+    -h, --help     Print this help message.
+    -d, --dir      Specifies the destination directory for the copy (default is "c:\temp\eBPF"), within the local machine or the VM.
+    --vm           Specifies where to copy the files. If this option is specified, the files are copied to the specified VM, otherwise they are copied to the local machine.
+    --remote_vm    Specifies the IP address or name of a remote VM. If this option is specified, files are copied using scp to the remote machine.
+    -t, --test     Includes the files needed for testing and debugging.
+
+'@
+            exit 0
+        }
+    "--vm=*"
+        {
+            $vm=($arg -split "=")[1];
+            break
+        }
+    "--remote_vm=*"
+        {
+            $remote_vm=($arg -split "=")[1];
+            break
+        }
+    "^(?:-d|--dir)(?:=(.+))?$"
+        {
+            if ($matches[1]) {
+                $destination_directory = $matches[1]
+            }
+            Clear-Variable -name vm
+            break
+        }
+    { @("-t", "--test") -contains $_ }
+        {
+            $copy_file_list = $install_files + $built_test_files
+            break
+        }
+    default
+        {
+            Write-Error "unknown option: $arg"
+            exit 1
+        }
+    }
+}
+
+if ($null -ne $remote_vm) {
+    ##
+    ## Copy files to a remote VM using PowerShell Remoting (WSMan).
+    ##
+    Write-Host "Copying files from `"$source_directory`" to `"$destination_directory`" on remote VM $remote_vm using PowerShell Remoting (WSMan)..."
+    $credential = Get-Credential -Message "Enter credentials for $remote_vm"
+    $session = New-PSSession -ComputerName $remote_vm -Credential $credential
+    if (-not $session) {
+        Write-Error "Failed to create PowerShell session to $remote_vm"
+        exit 1
+    }
+    foreach ($filePattern in $copy_file_list) {
+        $files = Get-ChildItem -Path $source_directory -Filter $filePattern -File
+        foreach ($file in $files) {
+            if ($exclude_files -notcontains $file.Name) {
+                $destinationPath = Join-Path $destination_directory $file.Name
+                Copy-Item -Path $file.FullName -Destination $destinationPath -ToSession $session -Force
+                if ($?) {
+                    Write-Host "Copied $($file.FullName) to $remote_vm`:$destinationPath."
+                } else {
+                    Write-Error "Copy-Item failed for $($file.FullName)"
+                    Remove-PSSession $session
+                    exit 1
+                }
+            } else {
+                Write-Host "Excluded $($file.FullName) from copying."
+            }
+        }
+    }
+    Remove-PSSession $session
+}
+elseif ($null -ne $vm) {
+    ##
+    ## Copy files to a VM.
+    ##
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal $identity
+    if (! $principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+        Write-Host "This command must be run as Administrator to deploy files into a VM."
+        exit 1
+    }
+    Enable-VMIntegrationService -VMName $vm -Name "Guest Service Interface"
+    if (! $?) {
+        exit 1
+    }
+    Write-Host "Copying files from `"$source_directory`" to `"$destination_directory`" in VM `"$vm`"..."
+    foreach ($filePattern in $copy_file_list) {
+        $files = Get-ChildItem -Path $source_directory -Filter $filePattern -File
+        foreach ($file in $files) {
+            # Check if the file should be excluded
+            if ($exclude_files -notcontains $file.Name) {
+                $destinationPath = Join-Path -Path $destination_directory -ChildPath $file.Name
+                Copy-VMFile "$vm" -SourcePath $file.FullName -DestinationPath "$destinationPath" -CreateFullPath -FileSource Host -Force
+                if (! $?) {
+                    exit 1
+                }
+                Write-Host "Copied $($file.FullName) to $($destinationPath)."
+            } else {
+                Write-Host "Excluded $($file.FullName) from copying."
+            }
+        }
+    }
+} else {
+   ##
+   ## Copy files to a local directory.
+   ##
+   Write-Host "Copying files from `"$source_directory`" to `"$destination_directory`""
+   foreach ($filePattern in $copy_file_list) {
+        $files = Get-ChildItem -Path $source_directory -Filter $filePattern -File
+        foreach ($file in $files) {
+            # Check if the file should be excluded
+            if ($exclude_files -notcontains $file.Name) {
+                $destinationPath = Join-Path -Path $destination_directory -ChildPath $file.Name
+                Copy-Item -Path $file.FullName -Destination $destinationPath -Force
+                Write-Host "Copied $($file.FullName) to $($destinationPath)."
+            } else {
+                Write-Host "Excluded $($file.FullName) from copying."
+            }
+        }
+   }
+
+
+
+}
+
+exit 0
